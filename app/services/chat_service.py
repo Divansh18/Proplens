@@ -6,14 +6,20 @@ from app.llm.base import LLMClient, LLMMessage
 from app.retrieval.base import Retriever, SearchResult
 from app.retrieval.filters import QueryFilters, extract_filters
 from app.schemas.chat import ChatRequest, ChatResponse, Source
+from app.services.cache import CacheKey, ResponseCache
+from app.services.listing_answer import append_listing_details
 
 SYSTEM_PROMPT = (
     "You are PropLens, an assistant for DarGlobal and Wasalt property information. "
     "Answer ONLY from the provided context. If the answer is not in the context, say you "
     "do not have that information and suggest what the user could ask instead. Never invent "
     "prices, availability, payment plans, or dates. Quote prices exactly as written, with "
-    "their currency. Be concise; use short bullet lists when comparing listings. Reply in "
-    "the same language as the user (English or Arabic). Cite factual claims with the numbered "
+    "their currency. Be concise; use short bullet lists when comparing listings. "
+    "For Wasalt listings, include the title, city, district, exact price, area, bedrooms, "
+    "and listing URL. If comparing lowest or highest prices, show the next two options too. "
+    "Say 'not provided' for missing fields. Treat areas marked unverified as reported values. "
+    "Reply in the same language as the user (English or Arabic). Cite factual claims with "
+    "the numbered "
     "context markers [1], [2], and so on. Do not cite a number that is not in the context."
 )
 ARABIC = re.compile(r"[\u0600-\u06ff]")
@@ -171,10 +177,17 @@ def _follow_up_filters(
 
 
 class ChatService:
-    def __init__(self, retriever: Retriever, llm_client: LLMClient, settings: Settings) -> None:
+    def __init__(
+        self,
+        retriever: Retriever,
+        llm_client: LLMClient,
+        settings: Settings,
+        cache: ResponseCache,
+    ) -> None:
         self.retriever = retriever
         self.llm_client = llm_client
         self.settings = settings
+        self.cache = cache
 
     async def reply(self, request: ChatRequest) -> ChatResponse:
         arabic = bool(ARABIC.search(request.message))
@@ -183,10 +196,18 @@ class ChatService:
 
         filters = extract_filters(request.message, self.retriever.known_cities)
         filters = _follow_up_filters(filters, request, self.retriever)
+        cache_key: CacheKey | None = None
+        if not request.history:
+            normalized = re.sub(r"[^\w\s]", " ", request.message.casefold())
+            cache_key = (" ".join(normalized.split()), filters)
+            cached = self.cache.get(cache_key)
+            if cached is not None:
+                return cached
         query = request.message
         if filters.city and filters.city.casefold() not in query.casefold():
             query += f" {filters.city}"
-        results = self.retriever.search(query, self.settings.top_k, filters)
+        limit = max(self.settings.top_k, 3) if filters.price_sort else self.settings.top_k
+        results = self.retriever.search(query, limit, filters)
         results = _city_project_results(results, filters.city, query)
         if not results:
             return ChatResponse(reply=_no_match(arabic), sources=[])
@@ -199,6 +220,16 @@ class ChatService:
         ):
             return ChatResponse(reply=_unknown_name(quoted[0], arabic), sources=[])
 
+        if filters.price_sort and all(
+            result.document.source == "wasalt" and result.document.metadata.get("type") == "listing"
+            for result in results
+        ):
+            answer = append_listing_details("", results, filters, arabic)
+            response = ChatResponse(reply=answer, sources=_source_list(results, answer))
+            if cache_key is not None:
+                self.cache.set(cache_key, response)
+            return response
+
         history = request.history[-self.settings.max_history_messages :]
         messages: list[LLMMessage] = [
             {"role": "system", "content": SYSTEM_PROMPT},
@@ -208,4 +239,8 @@ class ChatService:
         ]
         answer = _normalize_citations(await self.llm_client.complete(messages))
         answer = _exact_prices(answer, results)
-        return ChatResponse(reply=answer, sources=_source_list(results, answer))
+        answer = append_listing_details(answer, results, filters, arabic)
+        response = ChatResponse(reply=answer, sources=_source_list(results, answer))
+        if cache_key is not None:
+            self.cache.set(cache_key, response)
+        return response

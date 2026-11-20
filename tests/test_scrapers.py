@@ -23,7 +23,12 @@ from scraper.official import (
 )
 from scraper.parsing import dedupe_documents, parse_sitemap
 from scraper.run import run_source, write_documents
-from scraper.wasalt import build_listing_document, parse_listing_page, parse_listing_slug
+from scraper.wasalt import (
+    area_needs_verification,
+    build_listing_document,
+    parse_listing_page,
+    parse_listing_slug,
+)
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -72,6 +77,25 @@ def test_wasalt_real_sitemap_sample_builds_partial_records() -> None:
     assert dedupe_documents([document, document.model_copy(update={"url": urls[0] + "/"})]) == [
         document
     ]
+
+
+def test_large_apartment_area_is_preserved_but_flagged() -> None:
+    fields = {
+        "title": "Apartment 2919.75 SQM with 3 Bedrooms",
+        "property_type": "Apartment",
+        "purpose": "sale",
+        "area_sqm": "2919.75",
+        "price": "SAR 320000",
+    }
+    assert area_needs_verification(fields)
+    document = build_listing_document(
+        fields,
+        "https://wasalt.sa/en/property/sale/apartment-291975-sqm-with-3-bedrooms-5879395",
+    )
+    assert document is not None
+    assert document.metadata["area_sqm"] == "2919.75"
+    assert document.metadata["area_unverified"] is True
+    assert "Reported area (unverified): 2919.75 sqm" in document.text
 
 
 def test_darglobal_json_ld_parser_and_summary() -> None:

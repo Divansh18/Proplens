@@ -31,6 +31,8 @@ h1 { font-size: clamp(2.3rem, 6vw, 4rem); letter-spacing: -.065em; line-height: 
 .message.assistant { align-self: flex-start; background: #fff; border: 1px solid #e6e8e2; border-bottom-left-radius: 5px; }
 .message.loading { color: #68746d; }
 .message.error { color: #9b3f35; border-color: #e6c8c3; }
+.message.busy { color: #80601e; border-color: #e9d8a7; background: #fff9e9; }
+.message a { color: #276b51; text-decoration: underline; }
 .message p { margin: 0 0 8px; }
 .message p:last-child { margin-bottom: 0; }
 .message ul { margin: 4px 0 8px; padding-left: 21px; }

@@ -4,6 +4,21 @@ const sendButton = document.querySelector("#send-button");
 const messages = document.querySelector("#messages");
 const history = [];
 
+function appendTextWithLinks(container, text) {
+  for (const part of text.split(/(https?:\/\/[^\s]+)/g)) {
+    if (/^https?:\/\//.test(part)) {
+      const link = document.createElement("a");
+      link.href = part;
+      link.textContent = part;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      container.append(link);
+    } else {
+      container.append(document.createTextNode(part));
+    }
+  }
+}
+
 function appendInline(container, line) {
   for (const part of line.split(/(\*\*[^*]+\*\*)/g)) {
     if (part.startsWith("**") && part.endsWith("**")) {
@@ -11,7 +26,7 @@ function appendInline(container, line) {
       strong.textContent = part.slice(2, -2);
       container.append(strong);
     } else {
-      container.append(document.createTextNode(part));
+      appendTextWithLinks(container, part);
     }
   }
 }
@@ -87,13 +102,20 @@ async function sendMessage(question) {
       body: JSON.stringify({ message: question, history: recentHistory }),
     });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error?.message || "Something went wrong. Please try again.");
+    if (!response.ok) {
+      const error = new Error(data.error?.message || "Something went wrong. Please try again.");
+      error.status = response.status;
+      throw error;
+    }
     loading.remove();
     addMessage("assistant", data.reply, data.sources);
     history.push({ role: "assistant", content: data.reply });
   } catch (error) {
     loading.remove();
-    addMessage("assistant error", error.message || "Could not connect. Please try again.");
+    addMessage(
+      error.status === 503 ? "assistant busy" : "assistant error",
+      error.message || "Could not connect. Please try again.",
+    );
   } finally {
     sendButton.disabled = false;
     input.focus();

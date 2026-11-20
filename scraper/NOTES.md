@@ -15,6 +15,7 @@
 - Accessible listing HTML contains both JSON-LD and `__NEXT_DATA__`. The scraper uses `props.pageProps.propertyDetailsV3.propertyInfo` and its `attributes` for title, city, district, subtype, sale/rent price, currency, area, bedrooms, and description. JSON-LD fills any gaps. Bathrooms are kept only when actually shown.
 - Sitemap slugs sometimes omit decimal points in area values. A listing page's structured area takes precedence. If listing pages become blocked during a run, the fallback records retain only the URL-confirmed listing ID, purpose, and property type, tagged `data_source: sitemap_url`; area and bedroom numbers from slugs are not asserted as facts.
 - The verified run saved 150 unique listing-page records. All 150 have city, district, and price; 146 have area, 136 have bedrooms, and 1 has a bathroom count. Missing fields are omitted rather than guessed.
+- Area audit: values such as `2919.75 sqm` and `8000 sqm` for apartments appear in the listing page's structured attributes and visible description. The sitemap slug drops the decimal point, but the page parser takes the structured value, so this is not a parser decimal-loss bug. The snapshot preserves these reported values and flags 18 apartments over 1,000 sqm as `area_unverified`; chat answers label their areas as reported and unverified.
 
 ## Limits and use
 

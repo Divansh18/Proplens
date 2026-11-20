@@ -4,7 +4,7 @@ import logging
 import httpx
 
 from app.core.config import Settings
-from app.core.errors import LLMError
+from app.core.errors import LLMBusyError, LLMError
 from app.llm.base import LLMClient, LLMMessage
 
 logger = logging.getLogger(__name__)
@@ -33,6 +33,8 @@ class OpenRouterClient(LLMClient):
             "HTTP-Referer": self.settings.openrouter_http_referer,
             "X-Title": "PropLens",
         }
+        busy_failure = False
+        other_failure = False
         for model in models:
             if model in self._unavailable_models:
                 continue
@@ -50,6 +52,7 @@ class OpenRouterClient(LLMClient):
                         },
                     )
                 except (httpx.TimeoutException, httpx.TransportError) as exc:
+                    other_failure = True
                     logger.warning(
                         "OpenRouter request failed model=%s attempt=%d error=%s",
                         model,
@@ -61,6 +64,7 @@ class OpenRouterClient(LLMClient):
                         continue
                     break
                 if response.status_code == 429 or response.status_code >= 500:
+                    busy_failure = True
                     logger.warning(
                         "OpenRouter retryable response model=%s status=%d attempt=%d",
                         model,
@@ -77,14 +81,21 @@ class OpenRouterClient(LLMClient):
                     )
                     if response.status_code == 404:
                         self._unavailable_models.add(model)
+                    else:
+                        other_failure = True
                     break
                 try:
                     content = response.json()["choices"][0]["message"]["content"]
                 except (ValueError, KeyError, IndexError, TypeError):
+                    other_failure = True
                     logger.warning("OpenRouter returned an invalid response for model=%s", model)
                     break
                 if isinstance(content, str) and content.strip():
+                    logger.info("OpenRouter completed model=%s", model)
                     return content.strip()
                 logger.warning("OpenRouter returned an empty response for model=%s", model)
+                other_failure = True
                 break
+        if busy_failure and not other_failure:
+            raise LLMBusyError()
         raise LLMError()

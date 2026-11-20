@@ -4,7 +4,7 @@ import httpx
 import pytest
 
 from app.core.config import Settings
-from app.core.errors import LLMError
+from app.core.errors import LLMBusyError, LLMError
 from app.llm.openrouter import OpenRouterClient
 
 
@@ -80,3 +80,30 @@ async def test_openrouter_retries_rate_limit(monkeypatch: pytest.MonkeyPatch) ->
     finally:
         await client.aclose()
     assert attempts == 3
+
+
+@pytest.mark.asyncio
+async def test_all_models_busy_raises_service_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
+    attempts = 0
+
+    async def no_sleep(_seconds: float) -> None:
+        return None
+
+    def respond(_request: httpx.Request) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        return httpx.Response(429 if attempts <= 3 else 503)
+
+    monkeypatch.setattr("app.llm.openrouter.asyncio.sleep", no_sleep)
+    settings = Settings(
+        openrouter_api_key="test-key",
+        openrouter_model="first:free",
+        openrouter_fallback_models="second:free",
+    )
+    client = OpenRouterClient(settings, httpx.AsyncClient(transport=httpx.MockTransport(respond)))
+    try:
+        with pytest.raises(LLMBusyError):
+            await client.complete([{"role": "user", "content": "Hello"}])
+    finally:
+        await client.aclose()
+    assert attempts == 6

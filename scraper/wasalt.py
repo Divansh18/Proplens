@@ -27,6 +27,15 @@ BASE_URL = "https://wasalt.sa"
 LISTING_PATH = re.compile(r"^/en/property/(sale|rent)/([^/]+)$")
 
 
+def area_needs_verification(fields: dict[str, Any]) -> bool:
+    if clean_text(fields.get("property_type")).casefold() not in {"apartment", "studio"}:
+        return False
+    try:
+        return float(str(fields.get("area_sqm", "")).replace(",", "")) > 1000
+    except ValueError:
+        return False
+
+
 def parse_listing_slug(url: str) -> dict[str, Any]:
     parts = urlsplit(url)
     if parts.netloc != "wasalt.sa":
@@ -134,6 +143,7 @@ def build_listing_document(
     if not title:
         return None
     purpose = clean_text(fields.get("purpose"))
+    area_unverified = area_needs_verification(fields)
     sentences = [f"Wasalt {purpose} listing: {title}." if purpose else f"Wasalt listing: {title}."]
     for key, label in (
         ("city", "City"),
@@ -149,9 +159,13 @@ def build_listing_document(
         if value:
             if key == "area_sqm":
                 value = f"{value} sqm"
+                if area_unverified:
+                    label = "Reported area (unverified)"
             sentences.append(f"{label}: {value}." if label else f"{value.rstrip('.')}.")
     metadata = {"type": "listing", "data_source": data_source}
     metadata.update({key: value for key, value in fields.items() if value})
+    if area_unverified:
+        metadata["area_unverified"] = True
     return Document(
         id=stable_id("wasalt", url),
         source="wasalt",

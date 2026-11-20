@@ -22,6 +22,12 @@ class LLMError(PropLensError):
     public_message = "The assistant is temporarily unavailable."
 
 
+class LLMBusyError(LLMError):
+    code = "llm_busy"
+    status_code = 503
+    public_message = "The AI model is busy, please try again in a minute."
+
+
 class RetrievalError(PropLensError):
     code = "retrieval_error"
     status_code = 503

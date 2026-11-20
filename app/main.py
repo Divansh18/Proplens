@@ -15,6 +15,7 @@ from app.llm.openrouter import OpenRouterClient
 from app.retrieval.bm25 import BM25Retriever
 from app.retrieval.chunking import chunk_documents
 from app.retrieval.load import load_documents
+from app.services.cache import ResponseCache
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
@@ -27,6 +28,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.document_counts = counts
     app.state.retriever = BM25Retriever(chunks)
     app.state.llm_client = OpenRouterClient(app.state.settings)
+    app.state.response_cache = ResponseCache()
     logging.getLogger(__name__).info(
         "Search index ready: documents=%d chunks=%d", len(documents), len(chunks)
     )
