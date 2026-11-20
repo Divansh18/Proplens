@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f8f7f4" />
+    <title>PropLens — AI property assistant</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <main class="shell">
+      <header class="header">
+        <div class="brand">PropLens<span class="brand-dot">.</span></div>
+        <p>AI property assistant for DarGlobal &amp; Wasalt</p>
+      </header>
+
+      <section class="chat" aria-label="Property chat">
+        <div id="messages" class="messages" role="log" aria-live="polite" aria-relevant="additions">
+          <div class="welcome">
+            <span class="eyebrow">Property research, simplified</span>
+            <h1>Ask about a project.</h1>
+            <p>Explore publicly available details from DarGlobal and Wasalt in one place.</p>
+            <div class="examples" aria-label="Example questions">
+              <button type="button" class="example" data-question="What projects does DarGlobal offer in Dubai?">DarGlobal projects in Dubai</button>
+              <button type="button" class="example" data-question="What amenities are available in Wasalt properties?">Explore Wasalt amenities</button>
+              <button type="button" class="example" data-question="Compare DarGlobal and Wasalt project locations.">Compare project locations</button>
+            </div>
+          </div>
+        </div>
+
+        <form id="chat-form" class="composer">
+          <label for="message-input" class="sr-only">Your question</label>
+          <input id="message-input" name="message" type="text" maxlength="1000" placeholder="Ask a property question..." autocomplete="off" required />
+          <button id="send-button" type="submit">Send <span aria-hidden="true">↗</span></button>
+        </form>
+        <p class="footnote">Answers will include links to their public sources when available.</p>
+      </section>
+    </main>
+  </body>
+</html>
