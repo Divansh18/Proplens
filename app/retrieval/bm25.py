@@ -3,7 +3,13 @@ import re
 from rank_bm25 import BM25Okapi
 
 from app.retrieval.base import Retriever, SearchResult
-from app.retrieval.filters import QueryFilters, matches_filters, mentioned_source, numeric_price
+from app.retrieval.filters import (
+    QueryFilters,
+    is_list_query,
+    matches_filters,
+    mentioned_source,
+    numeric_price,
+)
 from app.schemas.document import Document
 
 STOPWORDS = frozenset(
@@ -56,7 +62,7 @@ class BM25Retriever(Retriever):
             filtered = [
                 index for index in candidates if matches_filters(self.chunks[index], filters)
             ]
-            if filtered:
+            if filtered or filters.strict:
                 candidates = filtered
         ranked = [index for index in candidates if scores[index] > 0]
         if filters and filters.price_sort:
@@ -76,4 +82,13 @@ class BM25Retriever(Retriever):
                 ranked.sort(key=lambda index: scores[index], reverse=True)
         else:
             ranked.sort(key=lambda index: scores[index], reverse=True)
+        if is_list_query(query):
+            seen_urls: set[str] = set()
+            unique: list[int] = []
+            for index in ranked:
+                url = self.chunks[index].url
+                if url not in seen_urls:
+                    seen_urls.add(url)
+                    unique.append(index)
+            ranked = unique
         return [SearchResult(self.chunks[index], float(scores[index])) for index in ranked[:k]]

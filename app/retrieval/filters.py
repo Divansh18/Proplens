@@ -23,6 +23,11 @@ MAX_PRICE = re.compile(
     r"(?:SAR|AED|USD|£|\$)?\s*(\d[\d,]*(?:\.\d+)?)\s*([mk])?\b",
     re.IGNORECASE,
 )
+LIST_QUERY = re.compile(
+    r"\b(?:list(?:\s+all)?|show(?:\s+me)?(?:\s+all)?|what\s+projects|"
+    r"which\s+projects|what\s+properties)\b",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True)
@@ -34,6 +39,7 @@ class QueryFilters:
     max_price: float | None = None
     source: PropertySource | None = None
     price_sort: Literal["asc", "desc"] | None = None
+    strict: bool = False
 
 
 def mentioned_source(query: str) -> PropertySource | None:
@@ -44,6 +50,10 @@ def mentioned_source(query: str) -> PropertySource | None:
     if wasalt and not dar:
         return "wasalt"
     return None
+
+
+def is_list_query(query: str) -> bool:
+    return bool(LIST_QUERY.search(query))
 
 
 def extract_filters(query: str, known_cities: frozenset[str]) -> QueryFilters:
@@ -98,18 +108,24 @@ def matches_filters(document: Document, filters: QueryFilters) -> bool:
     if filters.source and document.source != filters.source:
         return False
     if filters.city:
-        searchable = " ".join(
-            (str(metadata.get("city", "")), str(metadata.get("projects", "")), document.text)
-        ).casefold()
-        if filters.city.casefold() not in searchable:
-            return False
+        stated_city = metadata.get("city")
+        if isinstance(stated_city, str) and stated_city.strip():
+            if filters.city.casefold() not in stated_city.casefold():
+                return False
+        else:
+            searchable = f"{metadata.get('projects', '')} {document.text}".casefold()
+            if filters.city.casefold() not in searchable:
+                return False
     if filters.bedrooms is not None:
         bedrooms = str(metadata.get("bedrooms", ""))
         if not re.search(rf"\b{filters.bedrooms}\b", bedrooms):
             return False
     if filters.property_type:
-        searchable = f"{metadata.get('property_type', '')} {document.text}".casefold()
-        if filters.property_type not in searchable:
+        stated_type = metadata.get("property_type")
+        if metadata.get("type") == "listing":
+            if not isinstance(stated_type, str) or stated_type.casefold() != filters.property_type:
+                return False
+        elif filters.property_type not in f"{stated_type or ''} {document.text}".casefold():
             return False
     if filters.purpose and metadata.get("purpose") != filters.purpose:
         return False

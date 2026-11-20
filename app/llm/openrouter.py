@@ -1,5 +1,7 @@
 import asyncio
+import json
 import logging
+from collections.abc import AsyncIterator
 
 import httpx
 
@@ -96,6 +98,111 @@ class OpenRouterClient(LLMClient):
                 logger.warning("OpenRouter returned an empty response for model=%s", model)
                 other_failure = True
                 break
+        if busy_failure and not other_failure:
+            raise LLMBusyError()
+        raise LLMError()
+
+    async def stream(self, messages: list[LLMMessage]) -> AsyncIterator[str]:
+        api_key = self.settings.openrouter_api_key.get_secret_value()
+        if not api_key:
+            raise LLMError()
+        models = list(
+            dict.fromkeys([self.settings.openrouter_model, *self.settings.fallback_models])
+        )
+        url = f"{self.settings.openrouter_base_url.rstrip('/')}/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": self.settings.openrouter_http_referer,
+            "X-Title": "PropLens",
+        }
+        busy_failure = False
+        other_failure = False
+        for model in models:
+            if model in self._unavailable_models:
+                continue
+            for attempt in range(3):
+                emitted = False
+                finished = False
+                try:
+                    async with self.client.stream(
+                        "POST",
+                        url,
+                        headers=headers,
+                        json={
+                            "model": model,
+                            "messages": messages,
+                            "temperature": 0.2,
+                            "max_tokens": 600,
+                            "reasoning": {"enabled": False},
+                            "stream": True,
+                        },
+                    ) as response:
+                        if response.status_code == 429 or response.status_code >= 500:
+                            busy_failure = True
+                            logger.warning(
+                                "OpenRouter stream retryable model=%s status=%d attempt=%d",
+                                model,
+                                response.status_code,
+                                attempt + 1,
+                            )
+                            if attempt < 2:
+                                await asyncio.sleep(2**attempt)
+                                continue
+                            break
+                        if response.is_error:
+                            logger.warning(
+                                "OpenRouter stream rejected model=%s status=%d",
+                                model,
+                                response.status_code,
+                            )
+                            if response.status_code == 404:
+                                self._unavailable_models.add(model)
+                            else:
+                                other_failure = True
+                            break
+                        async for line in response.aiter_lines():
+                            if not line.startswith("data:"):
+                                continue
+                            payload = line[5:].strip()
+                            if payload == "[DONE]":
+                                finished = True
+                                break
+                            try:
+                                chunk = json.loads(payload)
+                                if chunk.get("error"):
+                                    raise ValueError("upstream stream error")
+                                delta = chunk["choices"][0].get("delta") or {}
+                                content = delta.get("content")
+                            except (ValueError, KeyError, IndexError, TypeError, AttributeError):
+                                if emitted:
+                                    raise LLMError() from None
+                                other_failure = True
+                                break
+                            if isinstance(content, str) and content:
+                                emitted = True
+                                yield content
+                        if emitted:
+                            if not finished:
+                                raise LLMError()
+                            logger.info("OpenRouter streamed model=%s", model)
+                            return
+                        other_failure = True
+                        break
+                except (httpx.TimeoutException, httpx.TransportError) as exc:
+                    logger.warning(
+                        "OpenRouter stream failed model=%s attempt=%d error=%s",
+                        model,
+                        attempt + 1,
+                        type(exc).__name__,
+                    )
+                    if emitted:
+                        raise LLMError() from None
+                    other_failure = True
+                    if attempt < 2:
+                        await asyncio.sleep(2**attempt)
+                        continue
+                    break
         if busy_failure and not other_failure:
             raise LLMBusyError()
         raise LLMError()

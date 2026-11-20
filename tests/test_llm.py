@@ -107,3 +107,103 @@ async def test_all_models_busy_raises_service_unavailable(monkeypatch: pytest.Mo
     finally:
         await client.aclose()
     assert attempts == 6
+
+
+@pytest.mark.asyncio
+async def test_openrouter_stream_falls_back_before_first_token() -> None:
+    models: list[str] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        payload = json.loads(request.content)
+        assert payload["stream"] is True
+        models.append(payload["model"])
+        if len(models) == 1:
+            return httpx.Response(404)
+        return httpx.Response(
+            200,
+            text='data: {"choices":[{"delta":{"content":"Hello "}}]}\n\n'
+            'data: {"choices":[{"delta":{"content":"world"}}]}\n\n'
+            "data: [DONE]\n\n",
+        )
+
+    settings = Settings(
+        openrouter_api_key="test-key",
+        openrouter_model="primary:free",
+        openrouter_fallback_models="fallback:free",
+    )
+    client = OpenRouterClient(settings, httpx.AsyncClient(transport=httpx.MockTransport(respond)))
+    try:
+        tokens = [token async for token in client.stream([{"role": "user", "content": "Hi"}])]
+    finally:
+        await client.aclose()
+    assert tokens == ["Hello ", "world"]
+    assert models == ["primary:free", "fallback:free"]
+
+
+@pytest.mark.asyncio
+async def test_openrouter_stream_error_after_token_does_not_fallback() -> None:
+    models: list[str] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        models.append(json.loads(request.content)["model"])
+        return httpx.Response(
+            200,
+            text='data: {"choices":[{"delta":{"content":"Partial"}}]}\n\n'
+            'data: {"error":{"message":"private upstream detail"}}\n\n',
+        )
+
+    settings = Settings(
+        openrouter_api_key="test-key",
+        openrouter_model="primary:free",
+        openrouter_fallback_models="fallback:free",
+    )
+    client = OpenRouterClient(settings, httpx.AsyncClient(transport=httpx.MockTransport(respond)))
+    try:
+        with pytest.raises(LLMError):
+            _ = [token async for token in client.stream([{"role": "user", "content": "Hi"}])]
+    finally:
+        await client.aclose()
+    assert models == ["primary:free"]
+
+
+@pytest.mark.asyncio
+async def test_openrouter_stream_busy_models_raise_service_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    attempts = 0
+
+    async def no_sleep(_seconds: float) -> None:
+        return None
+
+    def respond(_request: httpx.Request) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        return httpx.Response(429)
+
+    monkeypatch.setattr("app.llm.openrouter.asyncio.sleep", no_sleep)
+    settings = Settings(
+        openrouter_api_key="test-key",
+        openrouter_model="primary:free",
+        openrouter_fallback_models="fallback:free",
+    )
+    client = OpenRouterClient(settings, httpx.AsyncClient(transport=httpx.MockTransport(respond)))
+    try:
+        with pytest.raises(LLMBusyError):
+            _ = [token async for token in client.stream([{"role": "user", "content": "Hi"}])]
+    finally:
+        await client.aclose()
+    assert attempts == 6
+
+
+@pytest.mark.asyncio
+async def test_openrouter_stream_truncated_after_token_is_error() -> None:
+    response = httpx.Response(200, text='data: {"choices":[{"delta":{"content":"Partial"}}]}\n\n')
+    settings = Settings(openrouter_api_key="test-key", openrouter_model="primary:free")
+    client = OpenRouterClient(
+        settings, httpx.AsyncClient(transport=httpx.MockTransport(lambda _request: response))
+    )
+    try:
+        with pytest.raises(LLMError):
+            _ = [token async for token in client.stream([{"role": "user", "content": "Hi"}])]
+    finally:
+        await client.aclose()

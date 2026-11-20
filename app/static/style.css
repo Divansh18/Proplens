@@ -27,8 +27,10 @@ h1 { font-size: clamp(2.3rem, 6vw, 4rem); letter-spacing: -.065em; line-height: 
 .example { border: 1px solid #d9ddd7; border-radius: 999px; background: #fff; color: #40534a; padding: 10px 15px; cursor: pointer; text-align: left; }
 .example:hover, .example:focus-visible { border-color: #879a8b; background: #f0f4ee; }
 .message { max-width: min(82%, 640px); border-radius: 18px; padding: 14px 18px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.message { animation: message-appear 150ms ease-out both; }
 .message.user { align-self: flex-end; background: #244d3a; color: #fff; border-bottom-right-radius: 5px; }
 .message.assistant { align-self: flex-start; background: #fff; border: 1px solid #e6e8e2; border-bottom-left-radius: 5px; }
+.message.assistant.streaming { border-color: transparent; }
 .message.loading { color: #68746d; }
 .message.error { color: #9b3f35; border-color: #e6c8c3; }
 .message.busy { color: #80601e; border-color: #e9d8a7; background: #fff9e9; }
@@ -38,6 +40,17 @@ h1 { font-size: clamp(2.3rem, 6vw, 4rem); letter-spacing: -.065em; line-height: 
 .message ul { margin: 4px 0 8px; padding-left: 21px; }
 .message li { margin: 4px 0; }
 .sources { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin-top: 12px; border-top: 1px solid #e9ede7; padding-top: 10px; font-size: .8rem; color: #68746d; white-space: normal; }
+.sources-appear { animation: sources-appear 180ms ease-out both; }
+.typing { display: inline-flex; align-items: center; gap: 4px; height: 22px; }
+.typing i { width: 5px; height: 5px; border-radius: 50%; background: #8c9b90; animation: typing-bounce 1s infinite ease-in-out; }
+.typing i:nth-child(2) { animation-delay: 150ms; }
+.typing i:nth-child(3) { animation-delay: 300ms; }
+@keyframes message-appear { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes sources-appear { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes typing-bounce { 50% { opacity: .3; transform: translateY(-3px); } }
+@media (prefers-reduced-motion: reduce) {
+  .message, .sources-appear, .typing i { animation: none; }
+}
 .sources a { color: #276b51; text-decoration: none; border: 1px solid #cfe0d1; background: #f3f8f2; border-radius: 999px; padding: 5px 9px; }
 .sources a:hover { background: #e7f2e8; }
 .composer { display: flex; gap: 10px; background: #fff; border: 1px solid #d6ded5; border-radius: 16px; padding: 8px; box-shadow: 0 6px 24px rgb(30 50 38 / 5%); }

@@ -5,7 +5,7 @@ from app.retrieval.filters import QueryFilters
 
 
 def _listing_rows(
-    results: list[SearchResult], reply: str, filters: QueryFilters
+    results: list[SearchResult], reply: str, filters: QueryFilters, show_all: bool = False
 ) -> list[tuple[int, SearchResult]]:
     listings = [
         (index, result)
@@ -14,6 +14,8 @@ def _listing_rows(
     ]
     if filters.price_sort:
         return listings[:3]
+    if show_all:
+        return listings
     citations = {int(number) for number in re.findall(r"\[(\d+)\]", reply)}
     cited = [row for row in listings if row[0] in citations]
     return cited or listings[:1]
@@ -37,9 +39,20 @@ def _area(metadata: dict[str, object], arabic: bool) -> str:
 
 
 def append_listing_details(
-    reply: str, results: list[SearchResult], filters: QueryFilters, arabic: bool = False
+    reply: str,
+    results: list[SearchResult],
+    filters: QueryFilters,
+    arabic: bool = False,
+    show_all: bool = False,
 ) -> str:
-    rows = _listing_rows(results, reply, filters)
+    reply = re.split(
+        r"\n\s*(?:Wasalt listing details:|Lowest-priced options \(including the next two\):|"
+        r"Highest-priced options \(including the next two\):|تفاصيل عقارات Wasalt:|"
+        r"أقل الأسعار \(مع الخيارين التاليين\):|أعلى الأسعار \(مع الخيارين التاليين\):)",
+        reply,
+        maxsplit=1,
+    )[0].rstrip()
+    rows = _listing_rows(results, reply, filters, show_all)
     if not rows:
         return reply
     for _index, result in rows:
