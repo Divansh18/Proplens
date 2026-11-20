@@ -1,11 +1,15 @@
 from fastapi.testclient import TestClient
 
 
-def test_health_reports_empty_index(client: TestClient) -> None:
+def test_health_reports_loaded_index(client: TestClient) -> None:
     response = client.get("/health")
 
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "documents_loaded": 0}
+    assert response.json() == {
+        "status": "ok",
+        "documents_loaded": 1,
+        "sources": {"darglobal": 1, "wasalt": 0},
+    }
     assert response.headers["X-Request-ID"]
 
 

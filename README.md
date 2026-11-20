@@ -18,7 +18,7 @@ DarGlobal / Wasalt public pages
       FastAPI chat page
 ```
 
-The retriever and LLM client are interfaces, so their implementations can be replaced without changing the chat route. The deployed app will read committed JSON data and will not scrape at runtime.
+The retriever and LLM client are interfaces, so their implementations can be replaced without changing the chat route. At startup, the app validates the committed JSON data, splits long records into overlapping sentence chunks, and builds a BM25 index. Rule-based metadata filters handle location, bedrooms, property type, purpose, and price before ranking. The deployed app reads the snapshot and does not scrape at runtime.
 
 ## Local setup
 
@@ -29,10 +29,11 @@ python3.11 -m venv .venv
 source .venv/bin/activate
 make install
 cp .env.example .env
+# Set OPENROUTER_API_KEY in .env
 make run
 ```
 
-Open <http://localhost:8000>. The current chat reply is a placeholder. Retrieval and OpenRouter integration are planned for step 3. Add an OpenRouter API key to `.env` when the LLM integration is implemented.
+Open <http://localhost:8000>. `GET /health` reports loaded document counts per source. The chat API is `POST /api/chat` with a `message` and optional `history`. Answers use the OpenRouter free model configured in `.env` and include links to cited records. Current free model fallbacks handle unavailable primary models; set `OPENROUTER_FALLBACK_MODELS` to a comma-separated list of other free model IDs to change them. If the requested information is absent, the app gives a helpful no-match response without calling the model.
 
 ## Data collection
 

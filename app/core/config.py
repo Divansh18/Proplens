@@ -12,12 +12,20 @@ class Settings(BaseSettings):
 
     openrouter_api_key: SecretStr = SecretStr("")
     openrouter_model: str = "meta-llama/llama-3.3-70b-instruct:free"
+    openrouter_fallback_models: str = "nvidia/nemotron-3.5-lightning:free,openrouter/free"
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    openrouter_http_referer: str = "http://localhost:8000"
     data_dir: Path = PROJECT_ROOT / "data"
     log_level: str = "INFO"
     request_timeout_s: float = 30.0
     max_history_messages: int = 6
     top_k: int = 5
+
+    @property
+    def fallback_models(self) -> list[str]:
+        return [
+            model.strip() for model in self.openrouter_fallback_models.split(",") if model.strip()
+        ]
 
 
 @lru_cache

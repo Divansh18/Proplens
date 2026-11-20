@@ -26,6 +26,14 @@ END_HEADINGS = (
 )
 
 
+def project_location(region: str, name: str, description: str) -> str:
+    details = f"{name} {description}".casefold()
+    for city in ("Ras Al Khaimah", "Jeddah", "Riyadh"):
+        if city.casefold() in details:
+            return city
+    return region
+
+
 def extract_article_html(page_html: str) -> str:
     match = ARTICLE_BODY.search(page_html)
     if not match:
@@ -89,7 +97,7 @@ def parse_issuer_announcement(page_html: str) -> dict[str, Any]:
         status_match = re.search(r"Status\s+(.+?)\s+Launched\b", table_text)
         project = {
             "name": name,
-            "location": region,
+            "location": project_location(region, name, description),
             "description": description[:700],
         }
         if status_match:

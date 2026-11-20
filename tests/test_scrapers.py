@@ -19,12 +19,22 @@ from scraper.official import (
     build_company_document,
     build_portfolio_document,
     parse_issuer_announcement,
+    project_location,
 )
 from scraper.parsing import dedupe_documents, parse_sitemap
 from scraper.run import run_source, write_documents
 from scraper.wasalt import build_listing_document, parse_listing_page, parse_listing_slug
 
 FIXTURES = Path(__file__).parent / "fixtures"
+
+
+def test_issuer_project_location_prefers_explicit_city() -> None:
+    assert project_location("Dubai", "The Astera", "On Al Marjan Island, Ras Al Khaimah.") == (
+        "Ras Al Khaimah"
+    )
+    assert project_location("Saudi Arabia", "Trump Tower, Jeddah", "Waterfront residences") == (
+        "Jeddah"
+    )
 
 
 def test_real_challenge_pages_are_not_parsed_as_properties() -> None:

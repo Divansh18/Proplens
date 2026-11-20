@@ -1,25 +1,28 @@
 from typing import Annotated
 
-from fastapi import Depends
+from fastapi import Depends, Request
 
-from app.core.config import Settings, get_settings
+from app.core.config import Settings
 from app.llm.base import LLMClient
-from app.llm.openrouter import OpenRouterClient
 from app.retrieval.base import Retriever
-from app.retrieval.bm25 import BM25Retriever
 from app.services.chat_service import ChatService
 
 
-def get_retriever() -> Retriever:
-    return BM25Retriever()
+def get_retriever(request: Request) -> Retriever:
+    return request.app.state.retriever
 
 
-def get_llm_client(settings: Annotated[Settings, Depends(get_settings)]) -> LLMClient:
-    return OpenRouterClient(settings)
+def get_llm_client(request: Request) -> LLMClient:
+    return request.app.state.llm_client
+
+
+def get_app_settings(request: Request) -> Settings:
+    return request.app.state.settings
 
 
 def get_chat_service(
     retriever: Annotated[Retriever, Depends(get_retriever)],
     llm_client: Annotated[LLMClient, Depends(get_llm_client)],
+    settings: Annotated[Settings, Depends(get_app_settings)],
 ) -> ChatService:
-    return ChatService(retriever, llm_client)
+    return ChatService(retriever, llm_client, settings)

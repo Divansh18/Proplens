@@ -4,22 +4,60 @@ const sendButton = document.querySelector("#send-button");
 const messages = document.querySelector("#messages");
 const history = [];
 
+function appendInline(container, line) {
+  for (const part of line.split(/(\*\*[^*]+\*\*)/g)) {
+    if (part.startsWith("**") && part.endsWith("**")) {
+      const strong = document.createElement("strong");
+      strong.textContent = part.slice(2, -2);
+      container.append(strong);
+    } else {
+      container.append(document.createTextNode(part));
+    }
+  }
+}
+
+function appendMarkdown(container, content) {
+  let list = null;
+  for (const line of content.split(/\r?\n/)) {
+    const bullet = line.match(/^\s*[-*]\s+(.+)$/);
+    if (bullet) {
+      if (!list) {
+        list = document.createElement("ul");
+        container.append(list);
+      }
+      const item = document.createElement("li");
+      appendInline(item, bullet[1]);
+      list.append(item);
+    } else {
+      list = null;
+      const paragraph = document.createElement("p");
+      appendInline(paragraph, line);
+      container.append(paragraph);
+    }
+  }
+}
+
 function addMessage(role, content, sources = []) {
   const welcome = messages.querySelector(".welcome");
   if (welcome) welcome.remove();
 
   const bubble = document.createElement("div");
   bubble.className = `message ${role}`;
-  bubble.textContent = content;
+  if (role.startsWith("assistant")) appendMarkdown(bubble, content);
+  else bubble.textContent = content;
 
   if (sources.length > 0) {
     const sourceList = document.createElement("div");
     sourceList.className = "sources";
-    sourceList.textContent = "Sources: ";
+    const label = document.createElement("span");
+    label.textContent = "Sources";
+    sourceList.append(label);
     for (const source of sources) {
+      const target = new URL(source.url, window.location.href);
+      if (!["http:", "https:"].includes(target.protocol)) continue;
       const link = document.createElement("a");
-      link.href = source.url;
-      link.textContent = source.title;
+      link.href = target.href;
+      link.textContent = `${source.source === "darglobal" ? "DarGlobal" : "Wasalt"} · ${source.title}`;
       link.target = "_blank";
       link.rel = "noopener noreferrer";
       sourceList.append(link);

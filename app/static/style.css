@@ -31,8 +31,13 @@ h1 { font-size: clamp(2.3rem, 6vw, 4rem); letter-spacing: -.065em; line-height: 
 .message.assistant { align-self: flex-start; background: #fff; border: 1px solid #e6e8e2; border-bottom-left-radius: 5px; }
 .message.loading { color: #68746d; }
 .message.error { color: #9b3f35; border-color: #e6c8c3; }
-.sources { margin-top: 12px; border-top: 1px solid #e9ede7; padding-top: 9px; font-size: .8rem; color: #68746d; white-space: normal; }
-.sources a { color: #276b51; display: inline-block; margin: 4px 10px 0 0; }
+.message p { margin: 0 0 8px; }
+.message p:last-child { margin-bottom: 0; }
+.message ul { margin: 4px 0 8px; padding-left: 21px; }
+.message li { margin: 4px 0; }
+.sources { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin-top: 12px; border-top: 1px solid #e9ede7; padding-top: 10px; font-size: .8rem; color: #68746d; white-space: normal; }
+.sources a { color: #276b51; text-decoration: none; border: 1px solid #cfe0d1; background: #f3f8f2; border-radius: 999px; padding: 5px 9px; }
+.sources a:hover { background: #e7f2e8; }
 .composer { display: flex; gap: 10px; background: #fff; border: 1px solid #d6ded5; border-radius: 16px; padding: 8px; box-shadow: 0 6px 24px rgb(30 50 38 / 5%); }
 .composer:focus-within { border-color: #537c60; }
 .composer input { flex: 1; min-width: 0; border: 0; outline: 0; padding: 10px 12px; background: transparent; color: inherit; }
