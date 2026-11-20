@@ -1,0 +1,36 @@
+{
+  "props": {
+    "pageProps": {
+      "propertyDetailsV3": {
+        "propertyInfo": {
+          "title": "Apartment 675 SQM with 3 Bedrooms",
+          "city": "Jeddah",
+          "district": "Al Rabbwah",
+          "propertySubType": "Apartment",
+          "propertyFor": "sale",
+          "salePrice": 340000,
+          "expectedRent": "",
+          "currencyType": "SAR",
+          "description": "<p>\n\nApartment for Sale in Al Rabbwah, Jeddah</p><p>Built up Area: 675 SQM</p><p>The property has 3 bedrooms</p><p>Apartment has electricity and water Connections</p><p>Building year: 2026</p><p>Price: 340000 SAR</p>"
+        },
+        "attributes": [
+          {
+            "key": "noOfBedrooms",
+            "name": "Bedrooms",
+            "value": 3,
+            "image": "noofbedrooms.png",
+            "iconClass": "bedroom"
+          },
+          {
+            "key": "builtUpArea",
+            "name": "Built-Up Area",
+            "value": "675",
+            "image": "builtuparea.png",
+            "unit": "SQM",
+            "iconClass": "builtup-area"
+          }
+        ]
+      }
+    }
+  }
+}
