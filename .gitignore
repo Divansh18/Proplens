@@ -4,3 +4,5 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 *.py[cod]
+data/raw/darglobal/*
+!data/raw/darglobal/README.md

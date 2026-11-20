@@ -34,13 +34,16 @@ make run
 
 Open <http://localhost:8000>. The current chat reply is a placeholder. Retrieval and OpenRouter integration are planned for step 3. Add an OpenRouter API key to `.env` when the LLM integration is implemented.
 
-## Refresh public data
+## Data collection
+
+The scrapers check `robots.txt` and stop when a site serves a bot challenge. DarGlobal's main site uses Imperva protection; PropLens does not bypass it. The DarGlobal snapshot uses [official issuer announcements](https://www.londonstockexchange.com/en/news/article/DAR/dar-global-half-year-2026-results/17802155) published by the London Stock Exchange. You can also import public DarGlobal pages saved in your normal browser using the instructions in [data/raw/darglobal/README.md](data/raw/darglobal/README.md). Wasalt listings come from English URLs in its public sitemap. Both JSON files are snapshots to commit with the repository; the deployed app does not scrape at runtime.
 
 ```bash
 python -m scraper.run --source all --limit 150
+python -m scraper.run --source darglobal --from-html data/raw/darglobal/
 ```
 
-The scraper writes `data/darglobal.json` and `data/wasalt.json` atomically. It follows each host's robots rules and stops on bot challenges. See [scraper notes](scraper/NOTES.md) for the current access limits and source fields. The app reads committed JSON files and never scrapes at runtime.
+The scraper writes `data/darglobal.json` and `data/wasalt.json` atomically. See [scraper notes](scraper/NOTES.md) for source details and access limits.
 
 ```bash
 make lint

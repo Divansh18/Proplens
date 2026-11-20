@@ -2,9 +2,10 @@
 
 ## DarGlobal
 
-- `https://www.darglobal.co.uk/robots.txt` returned HTTP 200 with an Imperva/Incapsula challenge HTML page, not robots rules. It included `noindex,nofollow` and `/_Incapsula_Resource`.
-- No trustworthy robots permissions or sitemap could be read from that host. We stopped there and did not request project or company pages. Indexed URLs suggest project pages can be root-level slugs and `/projects/...` collection pages, but direct page structure, JSON-LD, and `__NEXT_DATA__` could not be verified.
-- The run writes `data/darglobal.json` as an empty list until the public site permits this crawler.
+- `www.darglobal.co.uk/robots.txt` and the apex `darglobal.co.uk/robots.txt` returned Imperva/Incapsula challenge HTML during reconnaissance. A later ordinary run briefly reached the main site's sitemap, then its first project URL (`/aida-360`) returned a challenge. The crawler stopped that host immediately; it did not solve or evade the challenge.
+- `darglobal.com/robots.txt` redirected to `dar.io`, an unrelated DAR Group site, so it was excluded. `cdn.darglobal.co.uk/robots.txt` returned 404, but a publicly indexed DarGlobal interim report PDF on the CDN returned HTTP 403 Cloudflare challenge; we stopped that host. The UK FCA's `data.fca.org.uk/robots.txt` allowed the public filing path and one DarGlobal filing PDF returned HTTP 200; it was not needed because the issuer-announcement HTML below was more directly parseable.
+- `www.londonstockexchange.com/robots.txt` allows the public DarGlobal issuer-announcement paths. The [2026 half-year results](https://www.londonstockexchange.com/en/news/article/DAR/dar-global-half-year-2026-results/17802155) and [2025 full-year results](https://www.londonstockexchange.com/en/news/article/DAR/full-year-results/c246-7b-5a-3d-03-4ec7bf) both returned HTTP 200 without a challenge. Their raw HTML embeds the issuer-authored article body in `articleBody`. The scraper extracts 20 named projects with locations and descriptions from the half-year announcement into one portfolio Document, plus a company overview Document from the full-year announcement. Both Documents cite the real announcement URLs.
+- Browser-saved public project pages can be imported without network requests. The importer recovers canonical/`og:url`, uses JSON-LD, `__NEXT_DATA__`, meta tags and visible content where present, strips navigation/scripts/footer, and caps each page's text at 4,000 characters. The [manual page list](../data/raw/darglobal/README.md) contains 18 recommended URLs. Saved HTML files are gitignored; the normalized JSON snapshot is committed.
 
 ## Wasalt
 

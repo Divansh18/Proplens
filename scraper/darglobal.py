@@ -1,7 +1,8 @@
 import logging
 import re
+from pathlib import Path
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import urljoin, urlsplit
 from xml.etree.ElementTree import ParseError
 
 import httpx
@@ -9,6 +10,13 @@ from bs4 import BeautifulSoup
 
 from app.schemas.document import Document
 from scraper.base import BaseScraper, SiteBlockedError
+from scraper.official import (
+    COMPANY_URL,
+    PORTFOLIO_URL,
+    build_company_document,
+    build_portfolio_document,
+    parse_issuer_announcement,
+)
 from scraper.parsing import (
     canonical_url,
     clean_text,
@@ -44,14 +52,43 @@ def _list_field(value: Any) -> list[str]:
     return []
 
 
+def visible_main_text(soup: BeautifulSoup, max_chars: int = 4000) -> str:
+    content = BeautifulSoup(str(soup), "lxml")
+    for tag in content.select("nav, footer, header, script, style, noscript, form, aside"):
+        tag.decompose()
+    main = content.find("main") or content.find("article") or content.body or content
+    return clean_text(main.get_text(" ", strip=True))[:max_chars].rstrip()
+
+
+def original_page_url(html: str) -> str | None:
+    soup = BeautifulSoup(html, "lxml")
+    canonical = soup.find("link", rel="canonical")
+    url = clean_text(canonical.get("href")) if canonical else ""
+    url = url or meta_content(soup, "og:url")
+    if url.startswith("/"):
+        url = urljoin("https://darglobal.co.uk", url)
+    parts = urlsplit(url)
+    if parts.scheme not in {"http", "https"} or parts.netloc.lower() not in {
+        "darglobal.co.uk",
+        "www.darglobal.co.uk",
+    }:
+        return None
+    return canonical_url(url)
+
+
 def parse_project_page(html: str) -> dict[str, Any]:
     if "_Incapsula_Resource" in html or "challenges.cloudflare.com" in html:
         return {}
     soup = BeautifulSoup(html, "lxml")
     objects = structured_objects(soup)
     heading = soup.find("h1")
-    name = clean_text(heading.get_text(" ", strip=True)) if heading else ""
-    name = name or first_string(objects, "name", "title") or meta_content(soup, "og:title")
+    name = meta_content(soup, "og:title") or (
+        clean_text(heading.get_text(" ", strip=True)) if heading else ""
+    )
+    name = name or first_string(objects, "name", "title")
+    if not name and soup.title:
+        name = clean_text(soup.title.get_text(" ", strip=True))
+    name = re.sub(r"\s*\|\s*DarGlobal.*$", "", name, flags=re.IGNORECASE)
     if not name:
         return {}
 
@@ -94,10 +131,13 @@ def parse_project_page(html: str) -> dict[str, Any]:
         "payment_plan": payment_plan,
         "amenities": amenities,
         "status": status,
+        "visible_text": visible_main_text(soup),
     }
 
 
-def build_project_document(fields: dict[str, Any], url: str) -> Document | None:
+def build_project_document(
+    fields: dict[str, Any], url: str, max_chars: int | None = None
+) -> Document | None:
     name = clean_text(fields.get("name"))
     if not name:
         return None
@@ -118,39 +158,89 @@ def build_project_document(fields: dict[str, Any], url: str) -> Document | None:
         text = ", ".join(value) if isinstance(value, list) else clean_text(value)
         if text:
             sentences.append(f"{label}: {text}." if label else f"{text.rstrip('.')}.")
+    visible = clean_text(fields.get("visible_text"))
+    if visible and visible not in clean_text(fields.get("description")):
+        sentences.append(visible)
     metadata = {"type": "project"}
-    metadata.update({key: value for key, value in fields.items() if value})
+    metadata.update(
+        {key: value for key, value in fields.items() if value and key != "visible_text"}
+    )
+    text = " ".join(sentences)
     return Document(
         id=stable_id("darglobal", url),
         source="darglobal",
         url=canonical_url(url),
         title=name,
-        text=" ".join(sentences),
+        text=text[:max_chars].rstrip() if max_chars else text,
         metadata=metadata,
     )
 
 
-def parse_company_page(html: str, url: str) -> Document | None:
+def parse_general_page(html: str, url: str, kind: str) -> Document | None:
     if "_Incapsula_Resource" in html or "challenges.cloudflare.com" in html:
         return None
     soup = BeautifulSoup(html, "lxml")
     main = soup.find("main") or soup
     heading = main.find("h1")
-    title = clean_text(heading.get_text(" ", strip=True)) if heading else "DarGlobal"
+    title = meta_content(soup, "og:title") or (
+        clean_text(heading.get_text(" ", strip=True)) if heading else ""
+    )
+    title = title or (clean_text(soup.title.get_text(" ", strip=True)) if soup.title else "")
     description = meta_content(soup, "description")
-    if not description:
-        paragraphs = [clean_text(p.get_text(" ", strip=True)) for p in main.find_all("p")[:4]]
-        description = " ".join(part for part in paragraphs if part)[:1200]
-    if not description:
+    visible = visible_main_text(soup)
+    if not title or not description and not visible:
         return None
+    text = " ".join(part for part in (description, visible) if part)[:4000].rstrip()
     return Document(
         id=stable_id("darglobal", url),
         source="darglobal",
         url=canonical_url(url),
         title=title,
-        text=f"DarGlobal company overview. {description}",
-        metadata={"type": "company"},
+        text=f"DarGlobal {kind}. {text}"[:4000].rstrip(),
+        metadata={"type": kind},
     )
+
+
+def parse_company_page(html: str, url: str) -> Document | None:
+    return parse_general_page(html, url, "company")
+
+
+def parse_collection_page(html: str, url: str) -> Document | None:
+    return parse_general_page(html, url, "collection")
+
+
+def import_saved_html(directory: Path, limit: int = 150) -> tuple[list[Document], int, list[str]]:
+    documents: list[Document] = []
+    errors: list[str] = []
+    skipped = 0
+    files = sorted(path for path in directory.iterdir() if path.suffix.lower() in {".html", ".htm"})
+    for path in files[:limit]:
+        try:
+            html = path.read_text(encoding="utf-8", errors="replace")
+            url = original_page_url(html)
+            if not url:
+                skipped += 1
+                errors.append(f"{path.name}: missing official canonical or og:url")
+                continue
+            page_path = urlsplit(url).path.rstrip("/")
+            if page_path in {"", "/about"}:
+                document = parse_company_page(html, url)
+            elif page_path == "/projects" or page_path.startswith("/projects/"):
+                document = parse_collection_page(html, url)
+            else:
+                document = build_project_document(parse_project_page(html), url, max_chars=4000)
+            if document:
+                document.metadata["data_source"] = "browser_saved_html"
+                documents.append(document)
+            else:
+                skipped += 1
+                errors.append(f"{path.name}: no usable page content")
+        except (OSError, ValueError) as exc:
+            skipped += 1
+            errors.append(f"{path.name}: {exc}")
+    unique = dedupe_documents(documents)
+    skipped += len(documents) - len(unique)
+    return unique, skipped, errors
 
 
 def _is_project_url(url: str) -> bool:
@@ -218,6 +308,23 @@ class DarGlobalScraper(BaseScraper):
         except SiteBlockedError as exc:
             self.blocked_reason = str(exc)
             logger.warning("DarGlobal blocked the crawler: %s", exc)
+        for url, builder in (
+            (PORTFOLIO_URL, build_portfolio_document),
+            (COMPANY_URL, build_company_document),
+        ):
+            try:
+                parsed = parse_issuer_announcement(await self.fetch(url))
+                document = builder(parsed, url)
+                if document:
+                    documents.append(document)
+                else:
+                    self.records_skipped += 1
+            except SiteBlockedError as exc:
+                self.blocked_reason = f"{self.blocked_reason or ''}; {exc}".strip("; ")
+                logger.warning("Official issuer source blocked the crawler: %s", exc)
+                break
+            except (OSError, ValueError, PermissionError, httpx.HTTPError) as exc:
+                self.errors.append(f"{url}: {exc}")
         unique = dedupe_documents(documents)
         self.records_skipped += len(documents) - len(unique)
         return unique
